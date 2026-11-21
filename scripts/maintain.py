@@ -286,6 +286,7 @@ class DepsReport:
     failing: List[tuple] = field(default_factory=list)  # (Bump, CheckResult)
     together: Optional[CheckResult] = None  # set when every bump passed alone but not together
     baseline: Optional[CheckResult] = None  # set when the mod fails its checks without any bump
+    required: List[Bump] = field(default_factory=list)  # bumps the mod can't build without
 
 
 def read_ignore(project: Path) -> List[str]:
@@ -328,6 +329,11 @@ def apply(project: Path, tools: Path, state: Path, bumps: List[Bump]) -> List[Bu
     return [b for b in bumps if b.id in applied]
 
 
+def missing(result: CheckResult, bumps: List[Bump]) -> List[Bump]:
+    """The bumps whose current version Gradle could not find, typically one its Maven has since deleted."""
+    return [b for b in bumps if "Could not find " + b.coordinate + ":" + b.current in result.log]
+
+
 def test_bumps(project: Path, tools: Path, state: Path, bumps: List[Bump], server_timeout: int) -> DepsReport:
     """All bumps together first; when that fails, each alone, then the passing ones together again."""
     report = DepsReport()
@@ -341,20 +347,35 @@ def test_bumps(project: Path, tools: Path, state: Path, bumps: List[Bump], serve
     # Blame the bumps only if the mod passes without them
     git(project, "checkout", "--", DEPS_FILE)
     base = checks(project, server_timeout)
+    required: List[Bump] = []
     if not base.ok:
-        report.baseline = base
+        # A mod whose pinned versions vanished from their Maven passes with those bumps; they become the base
+        required = missing(base, bumps)
+        if required:
+            apply(project, tools, state, required)
+            base = checks(project, server_timeout)
+        if not base.ok:
+            report.baseline = base
+            return report
+        report.required = list(required)
+    others = [b for b in bumps if b not in required]
+    if not others:
+        report.passing = list(required)
         return report
-    if len(bumps) == 1:
-        report.failing = [(bumps[0], result)]
+    if len(others) == 1:
+        report.passing = list(required)
+        report.failing = [(others[0], result)]
         return report
-    for bump in bumps:
-        apply(project, tools, state, [bump])
+    passing = []
+    for bump in others:
+        apply(project, tools, state, required + [bump])
         single = checks(project, server_timeout)
         if single.ok:
-            report.passing.append(bump)
+            passing.append(bump)
         else:
             report.failing.append((bump, single))
-    if len(report.passing) > 1 and report.failing:
+    report.passing = required + passing
+    if len(passing) > 1 and report.failing:
         apply(project, tools, state, report.passing)
         together = checks(project, server_timeout)
         if not together.ok:
@@ -371,8 +392,10 @@ def baseline_body(result: CheckResult) -> str:
             + run_url() + ".\n\n```\n" + result.tail() + "\n```")
 
 
-def deps_pr_body(bumps: List[Bump]) -> str:
-    rows = "\n".join("| `" + b.coordinate + "` | " + b.current + " | " + b.shown + " |" for b in bumps)
+def deps_pr_body(bumps: List[Bump], required: Optional[List[Bump]] = None) -> str:
+    rows = "\n".join("| `" + b.coordinate + "` | " + b.current + " | " + b.shown
+                     + (" (needed: " + b.current + " is gone from its Maven)" if required and b in required else "")
+                     + " |" for b in bumps)
     return ("| Dependency | From | To |\n|---|---|---|\n" + rows + "\n\n"
             "The mod assembled, built with its tests and started its dev server with these: " + run_url() + ".\n\n"
             "Add a dependency to `" + IGNORE_FILE + "` to stop these updates.")
@@ -423,7 +446,7 @@ def cmd_deps(args: argparse.Namespace) -> int:
         message = title + "\n\n" + "\n".join("* " + b.coordinate + " " + b.current + " -> " + b.shown
                                              for b in report.passing)
         push_branch(project, DEPS_BRANCH, base, message, [DEPS_FILE], args.dry_run)
-        github.upsert_pr(DEPS_BRANCH, base, title, deps_pr_body(report.passing), DEPS_LABEL)
+        github.upsert_pr(DEPS_BRANCH, base, title, deps_pr_body(report.passing, report.required), DEPS_LABEL)
     else:
         github.close_pr(DEPS_BRANCH, "No dependency update passes right now.")
     print("passing: " + ", ".join(b.coordinate for b in report.passing))

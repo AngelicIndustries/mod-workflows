@@ -101,6 +101,20 @@ class IsolationTest(unittest.TestCase):
         self.assertEqual(3, len(report.passing))
         self.assertEqual(1, len(self.applied))
 
+    def test_bumps_for_vanished_versions_become_the_base(self):
+        def checks(project, timeout):
+            current = [b.coordinate for b in self.applied[-1]]
+            if "a:a" not in current:
+                return maintain.CheckResult(False, "assemble", "Could not find a:a:1.")
+            return maintain.CheckResult("b:b" not in current, "build", "log")
+        maintain.checks = checks
+        report = maintain.test_bumps(Path("."), Path("."), Path("."), self.bumps(), 300)
+        self.assertIsNone(report.baseline)
+        self.assertEqual(["a:a"], [b.coordinate for b in report.required])
+        self.assertEqual(["a:a", "c:c"], [b.coordinate for b in report.passing])
+        self.assertEqual(["b:b"], [b.coordinate for b, _ in report.failing])
+        self.assertIn("(needed: 1 is gone from its Maven)", maintain.deps_pr_body(report.passing, report.required))
+
     def test_a_broken_mod_blames_no_bump(self):
         maintain.checks = self.fake_checks({"b:b"}, base_ok=False)
         report = maintain.test_bumps(Path("."), Path("."), Path("."), self.bumps(), 300)
