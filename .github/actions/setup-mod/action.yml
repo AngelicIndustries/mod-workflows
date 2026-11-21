@@ -1,0 +1,53 @@
+name: Set up a mod for the maintenance scripts
+description: Checks out modded_tools, installs Xvfb, the JDKs GTNH's build-and-test uses and Gradle's cache.
+
+inputs:
+  tools-ref:
+    description: Branch or tag of AngelicIndustries/modded_tools
+    default: master
+
+runs:
+  using: composite
+  steps:
+    - name: Checkout modded_tools
+      uses: actions/checkout@v5
+      with:
+        repository: AngelicIndustries/modded_tools
+        ref: ${{ inputs.tools-ref }}
+        path: .modded-tools
+
+    - name: Keep the tool checkouts out of git status
+      shell: bash
+      run: printf '%s\n' /.mod-workflows/ /.modded-tools/ >> .git/info/exclude
+
+    - name: Install Xvfb
+      shell: bash
+      run: sudo apt-get update -q && sudo apt-get install -y -q xvfb
+
+    - name: Determine JDK versions
+      id: jdks
+      shell: bash
+      run: |
+        {
+          echo 'versions<<EOF'
+          echo 8
+          echo 17
+          echo 21
+          if [[ -f gradle/gradle-daemon-jvm.properties ]]; then
+            sed -n 's/^toolchainVersion=//p' gradle/gradle-daemon-jvm.properties
+          fi
+          echo EOF
+        } >> "$GITHUB_OUTPUT"
+
+    - name: Set up JDKs
+      uses: actions/setup-java@v5
+      with:
+        java-version: ${{ steps.jdks.outputs.versions }}
+        distribution: zulu
+
+    - name: Set up Gradle
+      uses: gradle/actions/setup-gradle@v5
+
+    - name: Make gradlew executable
+      shell: bash
+      run: chmod +x gradlew

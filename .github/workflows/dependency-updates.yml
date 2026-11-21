@@ -1,0 +1,63 @@
+name: Dependency updates
+
+# Called from a mod's maintenance workflow; see callers/maintenance.yml.
+on:
+  workflow_call:
+    inputs:
+      server-timeout:
+        description: Seconds the dev server may take to start and stop
+        type: number
+        default: 300
+      tools-ref:
+        description: Branch or tag of AngelicIndustries/modded_tools
+        type: string
+        default: master
+    secrets:
+      MAINTENANCE_APP_ID:
+        description: ID of the GitHub App the bot acts as; without it, it's github-actions[bot]
+        required: false
+      MAINTENANCE_APP_PRIVATE_KEY:
+        description: That App's private key
+        required: false
+
+jobs:
+  dependencies:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    env:
+      HAS_APP: ${{ secrets.MAINTENANCE_APP_ID != '' }}
+    steps:
+      - name: Get the bot App's token
+        id: app
+        if: env.HAS_APP == 'true'
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.MAINTENANCE_APP_ID }}
+          private-key: ${{ secrets.MAINTENANCE_APP_PRIVATE_KEY }}
+
+      - name: Checkout the mod
+        uses: actions/checkout@v5
+        with:
+          token: ${{ steps.app.outputs.token || github.token }}
+
+      - name: Checkout mod-workflows
+        uses: actions/checkout@v5
+        with:
+          repository: AngelicIndustries/mod-workflows
+          ref: ${{ github.job_workflow_sha }}
+          path: .mod-workflows
+
+      - name: Set up the mod
+        uses: ./.mod-workflows/.github/actions/setup-mod
+        with:
+          tools-ref: ${{ inputs.tools-ref }}
+
+      - name: Bump the dependencies
+        run: python3 .mod-workflows/scripts/maintain.py deps --server-timeout ${{ inputs.server-timeout }}
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token || github.token }}
+          BOT_SLUG: ${{ steps.app.outputs.app-slug }}

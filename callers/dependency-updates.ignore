@@ -1,0 +1,3 @@
+# Dependencies the maintenance workflow never bumps: one group:artifact per line, * matches anything.
+# com.github.GTNewHorizons:Angelica
+# curse.maven:*

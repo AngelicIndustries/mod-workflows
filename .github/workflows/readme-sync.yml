@@ -1,0 +1,74 @@
+name: README sync
+
+# Called from a mod's readme-sync workflow; see callers/readme-sync.yml. Pages are only updated on the platforms
+# whose project ID is set in gradle.properties (modrinthProjectId, 67minecraftProjectId, curseForgeProjectId) and
+# whose secret is passed.
+on:
+  workflow_call:
+    inputs:
+      tools-ref:
+        description: Branch or tag of AngelicIndustries/modded_tools
+        type: string
+        default: master
+    secrets:
+      MAINTENANCE_APP_ID:
+        description: ID of the GitHub App the bot acts as; without it, it's github-actions[bot]
+        required: false
+      MAINTENANCE_APP_PRIVATE_KEY:
+        description: That App's private key
+        required: false
+      MODRINTH_TOKEN:
+        required: false
+      SIX_SEVEN_TOKEN:
+        required: false
+      CURSEFORGE_SESSION:
+        description: The Cookie header of a logged-in authors.curseforge.com session
+        required: false
+
+jobs:
+  readme:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    env:
+      HAS_APP: ${{ secrets.MAINTENANCE_APP_ID != '' }}
+    steps:
+      - name: Get the bot App's token
+        id: app
+        if: env.HAS_APP == 'true'
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.MAINTENANCE_APP_ID }}
+          private-key: ${{ secrets.MAINTENANCE_APP_PRIVATE_KEY }}
+
+      - name: Checkout the mod
+        uses: actions/checkout@v5
+        with:
+          token: ${{ steps.app.outputs.token || github.token }}
+
+      - name: Checkout mod-workflows
+        uses: actions/checkout@v5
+        with:
+          repository: AngelicIndustries/mod-workflows
+          ref: ${{ github.job_workflow_sha }}
+          path: .mod-workflows
+
+      - name: Checkout modded_tools
+        uses: actions/checkout@v5
+        with:
+          repository: AngelicIndustries/modded_tools
+          ref: ${{ inputs.tools-ref }}
+          path: .modded-tools
+
+      - name: Install Markdown for CurseForge's HTML
+        run: python3 -m pip install --user --break-system-packages markdown
+
+      - name: Push the README
+        run: python3 .mod-workflows/scripts/maintain.py readme --branch "${{ github.ref_name }}"
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token || github.token }}
+          BOT_SLUG: ${{ steps.app.outputs.app-slug }}
+          MODRINTH_TOKEN: ${{ secrets.MODRINTH_TOKEN }}
+          SIX_SEVEN_TOKEN: ${{ secrets.SIX_SEVEN_TOKEN }}
+          CURSEFORGE_SESSION: ${{ secrets.CURSEFORGE_SESSION }}
