@@ -549,12 +549,11 @@ def cmd_readme(args: argparse.Namespace) -> int:
             print("[dry run] would update " + name + " project " + project_id)
             continue
         if name == "CurseForge":
-            import markdown  # pip install markdown; only CurseForge takes HTML
-            html = markdown.markdown(markdown_body, extensions=["extra", "sane_lists"])
-            # The same request modded_tools' update_curseforge.py sends from a browser session
+            # The authors site's own request; description type 5 is Markdown, so CurseForge renders the README
+            # like GitHub and Modrinth do, inline HTML comments included
             cookie = token[len("Cookie:"):].strip() if token.lower().startswith("cookie:") else token
             status, text = request("PUT", "https://authors.curseforge.com/_api/projects/description/" + project_id,
-                                   {"description": html, "descriptionType": 1},
+                                   {"description": markdown_body, "descriptionType": 5},
                                    {"Cookie": cookie, "User-Agent": BROWSER_USER_AGENT,
                                     "Origin": "https://authors.curseforge.com",
                                     "Referer": "https://authors.curseforge.com/", "Sec-Fetch-Dest": "empty",

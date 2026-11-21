@@ -61,9 +61,6 @@ jobs:
           ref: ${{ inputs.tools-ref }}
           path: .modded-tools
 
-      - name: Install Markdown for CurseForge's HTML
-        run: python3 -m pip install --user --break-system-packages markdown
-
       - name: Push the README
         run: python3 .mod-workflows/scripts/maintain.py readme --branch "${{ github.ref_name }}"
         env:
