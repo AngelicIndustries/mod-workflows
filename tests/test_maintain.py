@@ -26,6 +26,7 @@ class IgnoreFileTest(unittest.TestCase):
 
     def test_minecrafts_lwjgl_is_never_bumped(self):
         self.assertTrue(maintain.ignored("org.lwjgl.lwjgl:lwjgl", maintain.BUILTIN_IGNORES))
+        self.assertTrue(maintain.ignored("org.mockito:mockito-core", maintain.BUILTIN_IGNORES))
 
     def test_no_file_ignores_nothing(self):
         with tempfile.TemporaryDirectory() as folder:

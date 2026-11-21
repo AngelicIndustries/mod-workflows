@@ -29,8 +29,9 @@ from typing import Dict, List, Optional
 
 DEPS_FILE = "dependencies.gradle"
 IGNORE_FILE = ".github/dependency-updates.ignore"
-# Never bumped: Minecraft 1.7.10 pins its LWJGL build, which the update checker would "update" to an older release
-BUILTIN_IGNORES = ["org.lwjgl.lwjgl:*"]
+# Never bumped: Minecraft 1.7.10 pins its LWJGL build, which the update checker would "update" to an older release;
+# GTNH runs tests on Java 8, and Mockito 4.11.0 is the last release that supports it
+BUILTIN_IGNORES = ["org.lwjgl.lwjgl:*", "org.mockito:*"]
 DEPS_BRANCH = "maintenance/dependencies"
 BUILDSCRIPT_BRANCH = "maintenance/buildscript"
 DEPS_LABEL = "dependency update"
