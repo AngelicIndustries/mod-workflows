@@ -420,9 +420,21 @@ def wrapper_version(project: Path) -> str:
 
 
 def buildscript_version(project: Path) -> str:
-    match = re.search(r'gtnhsettingsconvention"\)\s*version\("([^"]+)"\)',
-                      (project / "settings.gradle.kts").read_text("utf-8"))
-    return match.group(1) if match else "the latest version"
+    """The settings plugin version, from settings.gradle.kts or an older Groovy settings.gradle."""
+    for name in ("settings.gradle.kts", "settings.gradle"):
+        path = project / name
+        if path.is_file():
+            match = re.search(r"""gtnhsettingsconvention["']\)?\s*version\s*\(?["']([^"']+)["']""",
+                              path.read_text("utf-8"))
+            if match:
+                return match.group(1)
+    return "the latest version"
+
+
+def revert(project: Path) -> None:
+    """Drops the working tree changes, including files a buildscript upgrade added."""
+    git(project, "checkout", "--", ".")
+    git(project, "clean", "-fdq")
 
 
 def cmd_buildscript(args: argparse.Namespace) -> int:
@@ -436,7 +448,7 @@ def cmd_buildscript(args: argparse.Namespace) -> int:
         raise RuntimeError("updateBuildScript failed")
     if "upgradeBuildScriptMajor" in output:
         # A new major buildscript; updateBuildScript only stays within the current one
-        git(project, "checkout", "--", ".")
+        revert(project)
         code, output = run(["./gradlew", "upgradeBuildScriptMajor"], project)
         if code != 0:
             raise RuntimeError("upgradeBuildScriptMajor failed")
@@ -449,7 +461,7 @@ def cmd_buildscript(args: argparse.Namespace) -> int:
     github.ensure_label(BUILDSCRIPT_LABEL, "5319e7")
     # Rewritten comments or whitespace alone aren't an update
     if changed and buildscript_version(project) == before and wrapper_version(project) == before_wrapper:
-        git(project, "checkout", "--", ".")
+        revert(project)
         changed = []
     if not changed:
         github.close_pr(BUILDSCRIPT_BRANCH, "The buildscript is up to date.")
@@ -466,7 +478,7 @@ def cmd_buildscript(args: argparse.Namespace) -> int:
                          "its dev server with it: " + run_url() + ".", BUILDSCRIPT_LABEL)
         github.close_issues(BUILDSCRIPT_LABEL, [], "The buildscript update passes now.")
     else:
-        git(project, "checkout", "--", ".")
+        revert(project)
         github.close_pr(BUILDSCRIPT_BRANCH, "The buildscript update breaks the build now.")
         base = checks(project, args.server_timeout)
         if not base.ok:

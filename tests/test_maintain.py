@@ -127,6 +127,13 @@ class TextTest(unittest.TestCase):
                 'plugins {\n    id("com.gtnewhorizons.gtnhsettingsconvention") version("2.0.34")\n}\n')
             self.assertEqual("2.0.34", maintain.buildscript_version(project))
 
+    def test_buildscript_version_reads_groovy_settings(self):
+        with tempfile.TemporaryDirectory() as folder:
+            project = Path(folder)
+            (project / "settings.gradle").write_text(
+                "plugins {\n    id 'com.gtnewhorizons.gtnhsettingsconvention' version '1.0.38'\n}\n")
+            self.assertEqual("1.0.38", maintain.buildscript_version(project))
+
     def test_gradle_properties_unescape_colons(self):
         with tempfile.TemporaryDirectory() as folder:
             project = Path(folder)
