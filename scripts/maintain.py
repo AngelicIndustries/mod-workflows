@@ -29,6 +29,8 @@ from typing import Dict, List, Optional
 
 DEPS_FILE = "dependencies.gradle"
 IGNORE_FILE = ".github/dependency-updates.ignore"
+# Never bumped: Minecraft 1.7.10 pins its LWJGL build, which the update checker would "update" to an older release
+BUILTIN_IGNORES = ["org.lwjgl.lwjgl:*"]
 DEPS_BRANCH = "maintenance/dependencies"
 BUILDSCRIPT_BRANCH = "maintenance/buildscript"
 DEPS_LABEL = "dependency update"
@@ -155,6 +157,9 @@ class GitHub:
     def __init__(self, project: Path, dry_run: bool):
         self.project = project
         self.dry_run = dry_run
+        # Forks start with issues turned off; their reports then go to the run's summary instead
+        self.issues = dry_run or self.gh("repo", "view", "--json", "hasIssuesEnabled", "--jq", ".hasIssuesEnabled",
+                                         read=True).strip() == "true"
 
     def gh(self, *args: str, read: bool = False) -> str:
         if self.dry_run and not read:
@@ -187,13 +192,16 @@ class GitHub:
             self.gh("pr", "close", str(number), "--comment", comment, "--delete-branch")
 
     def open_issues(self, label: str) -> List[dict]:
-        if self.dry_run:
+        if self.dry_run or not self.issues:
             return []
         return json.loads(self.gh("issue", "list", "--label", label, "--state", "open", "--limit", "200",
                                   "--json", "number,title,body", read=True) or "[]")
 
     def upsert_issue(self, label: str, key: str, title: str, body: str) -> None:
         """One open issue per key, marked in its body, so reruns update it instead of opening another."""
+        if not self.issues:
+            report_without_issues(title, body)
+            return
         marker = "<!-- mod-workflows:" + key + " -->"
         body = body + "\n\n" + marker
         for issue in self.open_issues(label):
@@ -209,6 +217,17 @@ class GitHub:
             match = re.search(r"<!-- mod-workflows:(.+?) -->", issue.get("body") or "")
             if match and match.group(1) not in keep_keys:
                 self.gh("issue", "close", str(issue["number"]), "--comment", comment)
+
+
+def report_without_issues(title: str, body: str) -> None:
+    """Shows what would have been an issue as a warning and in the run's summary."""
+    print("::warning title=Issues are turned off in this repository::" + title)
+    summary = os.environ.get("GITHUB_STEP_SUMMARY")
+    if summary:
+        with open(summary, "a", encoding="utf-8") as file:
+            file.write("## " + title + "\n\n" + body + "\n\n")
+    else:
+        print(title + "\n\n" + body)
 
 
 def run_url() -> str:
@@ -372,7 +391,7 @@ def cmd_deps(args: argparse.Namespace) -> int:
     github = GitHub(project, args.dry_run)
     base = git(project, "rev-parse", "--abbrev-ref", "HEAD").strip()
     state = Path(os.environ.get("RUNNER_TEMP", "/tmp")) / "dependency-state.json"
-    patterns = read_ignore(project)
+    patterns = BUILTIN_IGNORES + read_ignore(project)
     bumps = [b for b in scan(project, Path(args.tools), state) if not ignored(b.coordinate, patterns)]
     report = test_bumps(project, Path(args.tools), state, bumps, args.server_timeout) if bumps else DepsReport()
     git(project, "checkout", "--", DEPS_FILE)

@@ -1,3 +1,4 @@
+import os
 import sys
 import tempfile
 import unittest
@@ -22,6 +23,9 @@ class IgnoreFileTest(unittest.TestCase):
         self.assertTrue(maintain.ignored("com.github.GTNewHorizons:Angelica", patterns))
         self.assertTrue(maintain.ignored("curse.maven:archaicfix-677782", patterns))
         self.assertFalse(maintain.ignored("com.github.GTNewHorizons:Hodgepodge", patterns))
+
+    def test_minecrafts_lwjgl_is_never_bumped(self):
+        self.assertTrue(maintain.ignored("org.lwjgl.lwjgl:lwjgl", maintain.BUILTIN_IGNORES))
 
     def test_no_file_ignores_nothing(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -103,6 +107,21 @@ class IsolationTest(unittest.TestCase):
         self.assertIsNotNone(report.baseline)
         self.assertEqual([], report.failing)
         self.assertEqual([], report.passing)
+
+
+class IssuesOffTest(unittest.TestCase):
+    def test_reports_go_to_the_summary(self):
+        github = maintain.GitHub.__new__(maintain.GitHub)
+        github.project, github.dry_run, github.issues = Path("."), False, False
+        with tempfile.TemporaryDirectory() as folder:
+            summary = Path(folder) / "summary.md"
+            os.environ["GITHUB_STEP_SUMMARY"] = str(summary)
+            try:
+                github.upsert_issue("dependency update", "a:b", "Updating a:b breaks the build", "the log")
+                github.close_issues("dependency update", [], "fixed")
+            finally:
+                del os.environ["GITHUB_STEP_SUMMARY"]
+            self.assertIn("## Updating a:b breaks the build", summary.read_text())
 
 
 class TextTest(unittest.TestCase):
