@@ -38,6 +38,8 @@ BOT_NAME = "github-actions[bot]"
 BOT_EMAIL = "41898282+github-actions[bot]@users.noreply.github.com"
 LOG_TAIL_LINES = 80
 USER_AGENT = "AngelicIndustries/mod-workflows (https://github.com/AngelicIndustries/mod-workflows)"
+# CurseForge's authors site sits behind Cloudflare and expects a browser
+BROWSER_USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64; rv:140.0) Gecko/20100101 Firefox/140.0"
 
 
 # Checks
@@ -549,10 +551,14 @@ def cmd_readme(args: argparse.Namespace) -> int:
         if name == "CurseForge":
             import markdown  # pip install markdown; only CurseForge takes HTML
             html = markdown.markdown(markdown_body, extensions=["extra", "sane_lists"])
+            # The same request modded_tools' update_curseforge.py sends from a browser session
+            cookie = token[len("Cookie:"):].strip() if token.lower().startswith("cookie:") else token
             status, text = request("PUT", "https://authors.curseforge.com/_api/projects/description/" + project_id,
-                                   {"description": html},
-                                   {"Cookie": token, "Origin": "https://authors.curseforge.com",
-                                    "Referer": "https://authors.curseforge.com/"})
+                                   {"description": html, "descriptionType": 1},
+                                   {"Cookie": cookie, "User-Agent": BROWSER_USER_AGENT,
+                                    "Origin": "https://authors.curseforge.com",
+                                    "Referer": "https://authors.curseforge.com/", "Sec-Fetch-Dest": "empty",
+                                    "Sec-Fetch-Mode": "cors", "Sec-Fetch-Site": "same-origin"})
             if status in (401, 403):
                 github.ensure_label(README_LABEL, "c5def5")
                 github.upsert_issue(README_LABEL, "curseforge-session", "The CurseForge session for README sync expired",

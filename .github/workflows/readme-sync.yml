@@ -22,7 +22,7 @@ on:
       SIX_SEVEN_TOKEN:
         required: false
       CURSEFORGE_SESSION:
-        description: The Cookie header of a logged-in authors.curseforge.com session
+        description: The CobaltSession cookie of a logged-in authors.curseforge.com session, as CobaltSession=...
         required: false
 
 jobs:

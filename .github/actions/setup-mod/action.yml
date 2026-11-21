@@ -48,6 +48,10 @@ runs:
     - name: Set up Gradle
       uses: gradle/actions/setup-gradle@v5
 
+    - name: Use the Angelic Maven for the OvermindDL1 mirror
+      shell: bash
+      run: mkdir -p ~/.gradle/init.d && cp "${{ github.action_path }}/../../../gradle/angelic-mirror.init.gradle" ~/.gradle/init.d/
+
     - name: Make gradlew executable
       shell: bash
       run: chmod +x gradlew

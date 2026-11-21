@@ -1,0 +1,22 @@
+// Serves the OvermindDL1 Forge mirror, which gtnhgradle and RetroFuturaGradle add and which times out on GitHub's
+// runners, from the Angelic Maven, which mirrors it.
+def overmind = 'gregtech.overminddl1.com'
+def angelic = 'https://maven.angelic.industries/releases'
+
+def redirect = { RepositoryHandler repositories ->
+    repositories.withType(MavenArtifactRepository).configureEach { repository ->
+        if (repository.url?.host == overmind) {
+            repository.url = angelic
+        }
+    }
+}
+
+beforeSettings { settings ->
+    redirect(settings.pluginManagement.repositories)
+    redirect(settings.dependencyResolutionManagement.repositories)
+}
+
+allprojects {
+    redirect(buildscript.repositories)
+    redirect(repositories)
+}
